@@ -34,3 +34,41 @@ To run the project:
 4. Run the program - `python populate_database.py populate` -> This will populate the database with the documents in the `data` folder
 5. Run the program - `python query_data.py "how to win the monopoly game?"` -> This will query the database and return the most relevant documents
 
+
+
+## Future Work
+
+This is great that we can use RAG to answer questions about the documents in the database.
+
+I am thinking of using RAG to retrive information of large codebase (some open source projects like kafka, otel, etc) and then use RAG to answer questions about the code in the database. For example - Who is the author of this piece of code? What is the purpose of this piece of code?
+
+### Example queries a contributor or maintainer can run:
+
+"When was the default timeout value last changed in NGINX config?"
+
+"Who changed Kafka partition count and why?"
+
+"What issues were linked to changing memory limits in deployment.yaml?"
+
+"What configs are commonly changed for scaling service X?"
+
+"What was the impact of switching TLS version in config files?"
+
+### The workflow for this will be like this:
+Repo Scanner → Git history parser → PR/issues scraper → Document builder → Embedder → Vector DB → Query API/UI
+
+
+
+### University program related questions chatbot
+
+- What is the purpose of this program?
+- What is the duration of this program?
+- What is the eligibility criteria for this program?
+- What is the application process for this program?
+- What is the selection process for this program?
+- What is the duration of this program?
+
+we need to scrape the website and get the data and then use RAG to answer the questions.
+
+
+

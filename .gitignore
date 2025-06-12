@@ -3,6 +3,8 @@ __pycache__/
 *.py[cod]
 *$py.class
 
+data/coding_interview_book.pdf
+
 # C extensions
 *.so
 

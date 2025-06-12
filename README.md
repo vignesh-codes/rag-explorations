@@ -21,6 +21,19 @@ The repository will contain:
 
 Instructions for setting up and running the examples will be added as they are developed.
 
+
+To Understand about RAG
+- https://www.promptingguide.ai/research/rag
+- https://www.youtube.com/watch?v=ea2W8IogX80
+- https://www.youtube.com/watch?v=2TJxpyO3ei4
+
+To run the project:
+1. Install the dependencies - `pip install -r requirements.txt`
+2. Follow this screenshot - `docs\run-program.png`
+3. Run the program - `python populate_database.py reset` -> This will reset the database
+4. Run the program - `python populate_database.py populate` -> This will populate the database with the documents in the `data` folder
+5. Run the program - `python query_data.py "how to win the monopoly game?"` -> This will query the database and return the most relevant documents
+
 ## License
 
 This project is open source and available under the MIT License.

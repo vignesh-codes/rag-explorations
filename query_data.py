@@ -1,10 +1,10 @@
 import argparse
 from langchain_chroma import Chroma
 from langchain.prompts import ChatPromptTemplate
-from langchain_ollama import OllamaLLM as Ollama
+from langchain_ollama import OllamaLLM
 from get_embedding_function import get_embedding_function
+from constants import CHROMADB_PATH, GENERATION_MODEL
 
-CHROMA_PATH = "chroma"
 COLLECTION_NAME = "test"
 
 PROMPT_TEMPLATE = """
@@ -31,7 +31,7 @@ def main():
     # Prepare the DB.
     embedding_function = get_embedding_function()
     db = Chroma(
-        persist_directory=CHROMA_PATH,
+        persist_directory=CHROMADB_PATH,
         embedding_function=embedding_function,
         collection_name=COLLECTION_NAME
     )
@@ -70,8 +70,11 @@ def query_rag(query_text: str, db):
     prompt_template = ChatPromptTemplate.from_template(PROMPT_TEMPLATE)
     prompt = prompt_template.format(context=context_text, question=query_text)
 
-    # Call LLM (Ollama mistral).
-    model = Ollama(model="mistral")
+    # Call LLM
+    model = OllamaLLM(
+        model=GENERATION_MODEL,
+        base_url="http://localhost:11434"
+    )
     response_text = model.invoke(prompt)
 
     # Print formatted response with sources.

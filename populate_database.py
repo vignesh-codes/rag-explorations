@@ -6,8 +6,8 @@ from langchain_text_splitters import RecursiveCharacterTextSplitter
 from langchain.schema.document import Document
 from get_embedding_function import get_embedding_function
 from langchain_chroma import Chroma
+from constants import CHROMADB_PATH
 
-CHROMA_PATH = "chroma"
 DATA_PATH = "data"
 COLLECTION_NAME = "test"
 BATCH_SIZE = 100
@@ -57,7 +57,7 @@ def add_to_chroma(chunks: list[Document]):
     # Load the existing database.
     print("🗂️  Connecting to Chroma DB...")
     db = Chroma(
-        persist_directory=CHROMA_PATH,
+        persist_directory=CHROMADB_PATH,
         embedding_function=get_embedding_function(),
         collection_name=COLLECTION_NAME
     )
@@ -124,7 +124,7 @@ def calculate_chunk_ids(chunks: list[Document]):
 def list_documents():
     print("🗂️  Listing documents in Chroma DB...")
     db = Chroma(
-        persist_directory=CHROMA_PATH,
+        persist_directory=CHROMADB_PATH,
         embedding_function=get_embedding_function(),
         collection_name=COLLECTION_NAME
     )
@@ -139,9 +139,9 @@ def list_documents():
 
 
 def clear_database():
-    if os.path.exists(CHROMA_PATH):
+    if os.path.exists(CHROMADB_PATH):
         print("🗑️  Clearing Chroma DB...")
-        shutil.rmtree(CHROMA_PATH)
+        shutil.rmtree(CHROMADB_PATH)
         print("✅ Database cleared.")
     else:
         print("⚠️  No database found to clear.")

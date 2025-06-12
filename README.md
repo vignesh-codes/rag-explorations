@@ -34,6 +34,3 @@ To run the project:
 4. Run the program - `python populate_database.py populate` -> This will populate the database with the documents in the `data` folder
 5. Run the program - `python query_data.py "how to win the monopoly game?"` -> This will query the database and return the most relevant documents
 
-## License
-
-This project is open source and available under the MIT License.

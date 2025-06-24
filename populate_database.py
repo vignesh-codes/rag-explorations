@@ -1,25 +1,31 @@
 import argparse
 import os
 import shutil
+import hashlib
+import nltk
+from nltk.tokenize import sent_tokenize
+from itertools import islice
 from langchain_community.document_loaders import PyPDFDirectoryLoader
-from langchain_text_splitters import RecursiveCharacterTextSplitter
+from langchain_chroma import Chroma
 from langchain.schema.document import Document
 from get_embedding_function import get_embedding_function
-from langchain_chroma import Chroma
 from constants import CHROMADB_PATH
+
+# One-time download for NLTK
+nltk.download("punkt")
+nltk.download("punkt_tab")
 
 DATA_PATH = "data"
 COLLECTION_NAME = "test"
-BATCH_SIZE = 100
+BATCH_SIZE = 2000  # Can increase based on CPU/memory
 
 def main():
-    # CLI with subcommands
     parser = argparse.ArgumentParser(description="Manage the Chroma DB.")
     subparsers = parser.add_subparsers(dest="command", required=True)
 
-    parser_reset = subparsers.add_parser("reset", help="Reset the database.")
-    parser_populate = subparsers.add_parser("populate", help="Populate the database with documents.")
-    parser_list = subparsers.add_parser("list", help="List documents in the database.")
+    subparsers.add_parser("reset", help="Reset the database.")
+    subparsers.add_parser("populate", help="Populate the database with documents.")
+    subparsers.add_parser("list", help="List documents in the database.")
 
     args = parser.parse_args()
 
@@ -32,120 +38,143 @@ def main():
     elif args.command == "list":
         list_documents()
 
-
 def load_documents():
     print("📚 Loading documents...")
-    document_loader = PyPDFDirectoryLoader(DATA_PATH)
-    documents = document_loader.load()
+    loader = PyPDFDirectoryLoader(DATA_PATH)
+    documents = loader.load()
     print(f"✅ Loaded {len(documents)} documents.")
     return documents
 
-
 def split_documents(documents: list[Document]):
-    print("🔪 Splitting documents into chunks...")
-    text_splitter = RecursiveCharacterTextSplitter(
-        chunk_size=800,
-        chunk_overlap=80,
-        separators=["\n\n", "\n", ".", " ", ""],  # Hierarchical splitting
-    )
-    chunks = text_splitter.split_documents(documents)
-    print(f"✅ Split into {len(chunks)} chunks.")
-    return chunks
+    print("🧠 Performing semantic-aware chunking with sliding window...")
 
+    max_chunk_tokens = 300
+    min_chunk_tokens = 80
+    overlap_sentences = 1
+
+    def count_tokens(text: str) -> int:
+        return len(text.split())  # Simplified, can replace with tokenizer
+
+    final_chunks = []
+
+    for doc in documents:
+        metadata = doc.metadata.copy()
+        sentences = sent_tokenize(doc.page_content)
+
+        current_chunk = []
+        current_token_count = 0
+        index = 0
+
+        while index < len(sentences):
+            sentence = sentences[index]
+            token_count = count_tokens(sentence)
+
+            if current_token_count + token_count <= max_chunk_tokens:
+                current_chunk.append(sentence)
+                current_token_count += token_count
+                index += 1
+            else:
+                if current_token_count >= min_chunk_tokens:
+                    text_chunk = " ".join(current_chunk)
+                    final_chunks.append(Document(page_content=text_chunk, metadata=metadata.copy()))
+                    current_chunk = current_chunk[-overlap_sentences:]
+                    current_token_count = sum(count_tokens(s) for s in current_chunk)
+                else:
+                    current_chunk.append(sentence)
+                    text_chunk = " ".join(current_chunk)
+                    final_chunks.append(Document(page_content=text_chunk, metadata=metadata.copy()))
+                    current_chunk = []
+                    current_token_count = 0
+                    index += 1
+
+        if current_chunk:
+            text_chunk = " ".join(current_chunk)
+            final_chunks.append(Document(page_content=text_chunk, metadata=metadata.copy()))
+
+    print(f"✅ Created {len(final_chunks)} coherent chunks.")
+    return final_chunks
+
+def sha1(text: str) -> str:
+    return hashlib.sha1(text.encode("utf-8")).hexdigest()
+
+def generate_unique_id(chunk: Document) -> str:
+    source = os.path.basename(chunk.metadata.get("source", "unknown"))
+    page = str(chunk.metadata.get("page", "0"))
+    chunk_text = chunk.page_content
+    base = f"{source}|{page}|{chunk_text.strip()[:50]}"  # hash partial text for uniqueness
+    return hashlib.sha1(base.encode("utf-8")).hexdigest()
+
+
+def batched(iterable, n):
+    """Yield successive n-sized chunks from iterable."""
+    it = iter(iterable)
+    while (chunk := list(islice(it, n))):
+        yield chunk
 
 def add_to_chroma(chunks: list[Document]):
-    # Load the existing database.
-    print("🗂️  Connecting to Chroma DB...")
+    print("🗂️ Connecting to Chroma DB...")
     db = Chroma(
         persist_directory=CHROMADB_PATH,
         embedding_function=get_embedding_function(),
-        collection_name=COLLECTION_NAME
+        collection_name=COLLECTION_NAME,
     )
 
-    # Calculate Page IDs and enrich metadata.
-    chunks_with_ids = calculate_chunk_ids(chunks)
-
-    # Retrieve existing IDs to avoid duplicates.
-    existing_items = db.get()
-    existing_ids = set(existing_items["ids"])
-    # existing_ids = set(existing_items["ids"])
-    print(f"📦 Existing documents in DB: {len(existing_ids)}")
-
-    # Filter new chunks.
-    new_chunks = []
-    for chunk in chunks_with_ids:
-        if chunk.metadata["id"] not in existing_ids:
-            new_chunks.append(chunk)
-
-    if len(new_chunks):
-        print(f"👉 Adding {len(new_chunks)} new chunks (batched)...")
-        for i in range(0, len(new_chunks), BATCH_SIZE):
-            batch_chunks = new_chunks[i:i + BATCH_SIZE]
-            batch_ids = [chunk.metadata["id"] for chunk in batch_chunks]
-            print(f"📝 Adding batch {i // BATCH_SIZE + 1} with {len(batch_chunks)} chunks...")
-            db.add_documents(batch_chunks, ids=batch_ids)
-            # db.persist()
-        print("✅ Successfully added all new chunks.")
-    else:
-        print("✅ No new documents to add.")
-
-
-def calculate_chunk_ids(chunks: list[Document]):
-    last_page_id = None
-    current_chunk_index = 0
+    texts = []
+    metadatas = []
+    ids = []
 
     for chunk in chunks:
-        # Normalize source path
-        source = chunk.metadata.get("source", "")
-        source_filename = os.path.basename(source)
-        chunk.metadata["source"] = source_filename
+        meta = chunk.metadata.copy()
+        source = os.path.basename(meta.get("source", "unknown"))
+        page = meta.get("page", "0")
+        chunk_index = meta.get("chunk_index", "0")
+        base_id = f"{source}:{page}:{chunk_index}"
+        unique_id = generate_unique_id(chunk)
 
-        page = chunk.metadata.get("page")
-        current_page_id = f"{source_filename}:{page}"
+        meta["id"] = unique_id
+        meta["source"] = source
+        meta["chunk_index"] = chunk_index
+        meta["document_title"] = source
 
-        # Increment chunk index per page
-        if current_page_id == last_page_id:
-            current_chunk_index += 1
-        else:
-            current_chunk_index = 0
+        texts.append(chunk.page_content)
+        metadatas.append(meta)
+        ids.append(unique_id)
 
-        # Assign chunk ID
-        chunk_id = f"{current_page_id}:{current_chunk_index}"
-        last_page_id = current_page_id
+    print(f"📥 Inserting {len(texts)} chunks to DB in batches of {BATCH_SIZE}...")
 
-        # Add useful metadata
-        chunk.metadata["id"] = chunk_id
-        chunk.metadata["document_title"] = source_filename
-        chunk.metadata["chunk_index"] = current_chunk_index
+    for b_ids, b_texts, b_metas in zip(
+        batched(ids, BATCH_SIZE),
+        batched(texts, BATCH_SIZE),
+        batched(metadatas, BATCH_SIZE),
+    ):
+        db.add_texts(
+            texts=b_texts,
+            metadatas=b_metas,
+            ids=b_ids,
+        )
 
-    return chunks
-
+    # db.persist()
+    print("✅ All documents upserted and persisted.")
 
 def list_documents():
-    print("🗂️  Listing documents in Chroma DB...")
+    print("🗂️ Listing documents in Chroma DB...")
     db = Chroma(
         persist_directory=CHROMADB_PATH,
         embedding_function=get_embedding_function(),
-        collection_name=COLLECTION_NAME
+        collection_name=COLLECTION_NAME,
     )
-    
-    # Do NOT pass include=["ids"] → just call get()
-    existing_items = db.get()
-    existing_ids = existing_items["ids"]  # list of IDs
-    
-    print(f"📦 Total documents in DB: {len(existing_ids)}")
-    print("📝 First 10 IDs:", existing_ids[:40])
-
-
+    items = db.get()
+    ids = items["ids"]
+    print(f"📦 Total documents in DB: {len(ids)}")
+    print("📝 First 40 IDs:", ids[:40])
 
 def clear_database():
     if os.path.exists(CHROMADB_PATH):
-        print("🗑️  Clearing Chroma DB...")
+        print("🧹 Deleting Chroma DB directory...")
         shutil.rmtree(CHROMADB_PATH)
         print("✅ Database cleared.")
     else:
-        print("⚠️  No database found to clear.")
-
+        print("⚠️ No DB found at path to delete.")
 
 if __name__ == "__main__":
     main()

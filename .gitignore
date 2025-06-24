@@ -4,7 +4,7 @@ __pycache__/
 *$py.class
 
 data/coding_interview_book.pdf
-
+coding_interview_book.pdf
 # C extensions
 *.so
 

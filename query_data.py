@@ -7,6 +7,8 @@ from langchain_openai import ChatOpenAI
 from langchain_openai import OpenAIEmbeddings
 from constants import CHROMADB_PATH
 from dotenv import load_dotenv
+from visualize import visualize_query_results
+from visualize import visualize_embedding_projection
 
 load_dotenv()
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
@@ -53,6 +55,7 @@ def main():
 
 def query_rag(query_text: str, db):
     results = db.similarity_search_with_score(query_text, k=5)
+    visualize_query_results(results)
 
     if not results:
         print("\n📘 Answer:\nI don't know based on the provided context.")
@@ -62,6 +65,7 @@ def query_rag(query_text: str, db):
     # Sort by similarity score
     final_results = sorted(results, key=lambda x: x[1])
 
+    # Prepare prompt context with image links
     context_parts = []
     for doc, _ in final_results:
         text = doc.page_content.strip()
@@ -89,6 +93,23 @@ def query_rag(query_text: str, db):
     print(response_text)
     print("\n🔍 Sources Used:")
     print(", ".join(sources))
+
+    # 🧠 NEW: Embedding Visualization
+    from langchain_openai import OpenAIEmbeddings
+    embedding_function = OpenAIEmbeddings()
+
+    all_data = db.get(include=["embeddings"])
+    all_embeddings = all_data["embeddings"]
+
+    query_embedding = embedding_function.embed_query(query_text)
+    retrieved_embeddings = [embedding_function.embed_query(doc.page_content) for doc, _ in final_results]
+
+    visualize_embedding_projection(
+        all_embeddings=all_embeddings,
+        retrieved_embeddings=retrieved_embeddings,
+        query_embedding=[query_embedding]
+        # You can add augmented_query_embedding=[] later if needed
+    )
 
     return response_text
 

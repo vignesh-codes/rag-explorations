@@ -8,16 +8,24 @@ from itertools import islice
 from langchain_community.document_loaders import PyPDFDirectoryLoader
 from langchain_chroma import Chroma
 from langchain.schema.document import Document
-from get_embedding_function import get_embedding_function
-from constants import CHROMADB_PATH
+from langchain_openai import OpenAIEmbeddings
+from langchain_openai import ChatOpenAI
+from dotenv import load_dotenv
 
-# One-time download for NLTK
+load_dotenv()
+
 nltk.download("punkt")
 nltk.download("punkt_tab")
 
 DATA_PATH = "data"
 COLLECTION_NAME = "test"
+CHROMADB_PATH = "chroma_db"
 BATCH_SIZE = 2000  # Can increase based on CPU/memory
+
+OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
+GROQ_API_KEY = os.getenv("GROQ_API_KEY")
+LANGCHAIN_API_KEY = os.getenv("LANGCHAIN_API_KEY")
+LANGCHAIN_TRACING_V2 = os.getenv("LANGCHAIN_TRACING_V2")
 
 def main():
     parser = argparse.ArgumentParser(description="Manage the Chroma DB.")
@@ -101,12 +109,10 @@ def generate_unique_id(chunk: Document) -> str:
     source = os.path.basename(chunk.metadata.get("source", "unknown"))
     page = str(chunk.metadata.get("page", "0"))
     chunk_text = chunk.page_content
-    base = f"{source}|{page}|{chunk_text.strip()[:50]}"  # hash partial text for uniqueness
+    base = f"{source}|{page}|{chunk_text.strip()[:50]}"
     return hashlib.sha1(base.encode("utf-8")).hexdigest()
 
-
 def batched(iterable, n):
-    """Yield successive n-sized chunks from iterable."""
     it = iter(iterable)
     while (chunk := list(islice(it, n))):
         yield chunk
@@ -115,7 +121,7 @@ def add_to_chroma(chunks: list[Document]):
     print("🗂️ Connecting to Chroma DB...")
     db = Chroma(
         persist_directory=CHROMADB_PATH,
-        embedding_function=get_embedding_function(),
+        embedding_function=OpenAIEmbeddings(),
         collection_name=COLLECTION_NAME,
     )
 
@@ -128,7 +134,6 @@ def add_to_chroma(chunks: list[Document]):
         source = os.path.basename(meta.get("source", "unknown"))
         page = meta.get("page", "0")
         chunk_index = meta.get("chunk_index", "0")
-        base_id = f"{source}:{page}:{chunk_index}"
         unique_id = generate_unique_id(chunk)
 
         meta["id"] = unique_id
@@ -153,14 +158,13 @@ def add_to_chroma(chunks: list[Document]):
             ids=b_ids,
         )
 
-    # db.persist()
     print("✅ All documents upserted and persisted.")
 
 def list_documents():
     print("🗂️ Listing documents in Chroma DB...")
     db = Chroma(
         persist_directory=CHROMADB_PATH,
-        embedding_function=get_embedding_function(),
+        embedding_function=OpenAIEmbeddings(),
         collection_name=COLLECTION_NAME,
     )
     items = db.get()

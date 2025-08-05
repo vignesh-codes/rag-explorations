@@ -61,5 +61,3 @@ src/
 4. **Store in Database**: Chunks and embeddings stored in ChromaDB
 5. **Query Processing**: User questions are embedded and matched against chunks
 6. **Generate Answer**: Retrieved chunks provide context for LLM to generate answer
-
-Simple and effective! Perfect for learning RAG concepts.

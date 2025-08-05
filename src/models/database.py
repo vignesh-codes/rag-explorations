@@ -18,6 +18,7 @@ class RAGDatabase:
         self.db_path = Path(DB_PATH)
         self.collection_name = "documents"
         self._db = None
+        self._client = None
     
     @property
     def db(self):
@@ -30,11 +31,91 @@ class RAGDatabase:
             )
         return self._db
     
+    def clear_collection(self):
+        """Clear all documents from the collection without deleting files."""
+        try:
+            # Get all document IDs
+            data = self.db.get()
+            if data['ids']:
+                # Delete all documents
+                self.db.delete(ids=data['ids'])
+            return True
+        except Exception as e:
+            raise DatabaseError(f"Failed to clear collection: {e}")
+    
     def reset(self):
-        """Reset database."""
+        """Reset database with Windows-friendly approach."""
+        import time
+        import gc
+        
+        # Close existing connection first
+        if self._db is not None:
+            try:
+                # Try to delete the collection first
+                self._db.delete_collection()
+            except:
+                pass
+            self._db = None
+        
+        # Force garbage collection to release references
+        gc.collect()
+        time.sleep(1.0)  # Give Windows time to release file handles
+        
+        # Try multiple approaches to remove the database
         if self.db_path.exists():
-            shutil.rmtree(self.db_path)
+            max_attempts = 3
+            for attempt in range(max_attempts):
+                try:
+                    shutil.rmtree(self.db_path)
+                    break  # Success!
+                except PermissionError as e:
+                    if attempt < max_attempts - 1:
+                        # Wait longer and try again
+                        time.sleep(2.0)
+                        gc.collect()
+                    else:
+                        # Last attempt failed - try alternative approach
+                        try:
+                            self._force_remove_directory(self.db_path)
+                        except Exception:
+                            # If all else fails, create a new database path
+                            import uuid
+                            new_path = self.db_path.parent / f"chroma_db_{uuid.uuid4().hex[:8]}"
+                            self.db_path = new_path
+                            break
+        
         self._db = None
+    
+    def _force_remove_directory(self, path):
+        """Force remove directory on Windows using alternative methods."""
+        import subprocess
+        import platform
+        
+        if platform.system() == "Windows":
+            try:
+                # Use Windows rmdir command with force
+                subprocess.run(['rmdir', '/s', '/q', str(path)], 
+                             shell=True, check=True, capture_output=True)
+            except subprocess.CalledProcessError:
+                # If that fails, try robocopy trick (Windows-specific)
+                empty_dir = path.parent / "empty_temp"
+                empty_dir.mkdir(exist_ok=True)
+                try:
+                    subprocess.run(['robocopy', str(empty_dir), str(path), '/mir'], 
+                                 shell=True, capture_output=True)
+                    shutil.rmtree(path)
+                    shutil.rmtree(empty_dir)
+                except:
+                    # Clean up empty dir if it exists
+                    if empty_dir.exists():
+                        try:
+                            shutil.rmtree(empty_dir)
+                        except:
+                            pass
+                    raise
+        else:
+            # Non-Windows systems
+            shutil.rmtree(path)
     
     def populate(self, data_path=None):
         """Load and process documents."""
@@ -61,3 +142,13 @@ class RAGDatabase:
     def list_documents(self):
         """List all documents."""
         return self.db.get()
+    
+    def close(self):
+        """Close database connection."""
+        if self._db is not None:
+            try:
+                # ChromaDB doesn't have an explicit close method,
+                # but we can clear the reference
+                self._db = None
+            except:
+                pass

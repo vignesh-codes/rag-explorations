@@ -1,6 +1,11 @@
 """
 Streamlit app for PDF chat with RAG system and performance metrics.
 """
+# Initialize LangTrace FIRST - before any LLM imports
+from src.utils.config import LANGTRACE_API_KEY
+from langtrace_python_sdk import langtrace
+langtrace.init(api_key=LANGTRACE_API_KEY)
+
 import streamlit as st
 import time
 import os
@@ -341,6 +346,11 @@ class StreamlitRAGApp:
         # Query input
         query = st.text_input("Ask a question about your uploaded PDFs:", key="query_input")
         
+        # Retrieval strategy option
+        col1, col2 = st.columns([3, 1])
+        with col2:
+            diverse_search = st.checkbox("Diverse sources", value=True, help="Ensure results from multiple documents")
+        
         if st.button("Send", type="primary") and query:
             if st.session_state.database is None:
                 st.error("Please upload and process PDFs first!")
@@ -349,11 +359,17 @@ class StreamlitRAGApp:
             with st.spinner("Thinking..."):
                 try:
                     # Get response from RAG system
-                    result = st.session_state.query_engine.query(
-                        st.session_state.database, 
-                        query, 
-                        k=3
-                    )
+                    if diverse_search:
+                        # Use diverse search to get chunks from multiple sources
+                        results = st.session_state.database.search_diverse(query, k=8, min_sources=2)
+                        result = st.session_state.query_engine._process_results(results, query)
+                    else:
+                        # Use standard similarity search
+                        result = st.session_state.query_engine.query(
+                            st.session_state.database, 
+                            query, 
+                            k=8
+                        )
                     
                     # Calculate performance metrics
                     metrics = self.calculate_performance_metrics(query, result)

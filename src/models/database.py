@@ -139,6 +139,50 @@ class RAGDatabase:
         """Search for similar documents."""
         return self.db.similarity_search_with_score(query, k=k)
     
+    def search_diverse(self, query, k=5, min_sources=2):
+        """Search for similar documents ensuring diversity across sources."""
+        # Get more results initially
+        initial_results = self.db.similarity_search_with_score(query, k=k*2)
+        
+        if not initial_results:
+            return []
+        
+        # Group by source
+        source_groups = {}
+        for doc, score in initial_results:
+            source = doc.metadata.get('source', 'unknown')
+            if source not in source_groups:
+                source_groups[source] = []
+            source_groups[source].append((doc, score))
+        
+        # Ensure we have at least min_sources represented
+        diverse_results = []
+        sources_used = set()
+        
+        # First pass: get best result from each source
+        for source, docs in source_groups.items():
+            if len(diverse_results) < k:
+                best_doc, best_score = min(docs, key=lambda x: x[1])  # Lower score = better
+                diverse_results.append((best_doc, best_score))
+                sources_used.add(source)
+        
+        # Second pass: fill remaining slots with best remaining results
+        remaining_docs = []
+        for source, docs in source_groups.items():
+            for doc, score in docs:
+                if (doc, score) not in diverse_results:
+                    remaining_docs.append((doc, score))
+        
+        # Sort remaining by score and add until we reach k
+        remaining_docs.sort(key=lambda x: x[1])
+        for doc, score in remaining_docs:
+            if len(diverse_results) < k:
+                diverse_results.append((doc, score))
+        
+        # Sort final results by score
+        diverse_results.sort(key=lambda x: x[1])
+        return diverse_results[:k]
+    
     def list_documents(self):
         """List all documents."""
         return self.db.get()

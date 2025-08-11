@@ -2,9 +2,9 @@
 # Uncomment to enable tracing
 
 # Must precede any llm module imports
-# from src.utils.config import LANGTRACE_API_KEY
-# from langtrace_python_sdk import langtrace
-# langtrace.init(api_key=LANGTRACE_API_KEY)
+from src.utils.config import LANGTRACE_API_KEY
+from langtrace_python_sdk import langtrace
+langtrace.init(api_key=LANGTRACE_API_KEY)
 
 import argparse
 import sys

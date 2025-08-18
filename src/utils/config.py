@@ -6,11 +6,9 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
-# Simple configuration variables
 OPENAI_API_KEY = os.getenv("OPENAI_API_KEY")
 LANGTRACE_API_KEY = os.getenv("LANGTRACE_API_KEY")
 
-# Paths
 DATA_PATH = "data"
 VISUALIZATION_PATH = "visualizations"
 DB_PATH = "chroma_db"

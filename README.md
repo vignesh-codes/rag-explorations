@@ -373,7 +373,4 @@ docker run -p 8501:8501 rag-system
 - **Response Time**: 2.3s average (embedding: 0.8s, search: 0.3s, generation: 1.2s)
 - **Accuracy**: 92% relevant answers (manual evaluation)
 - **Source Attribution**: 100% of answers include proper citations
-- **Scalability**: Handles 1000+ documents, 10 queries/minute
-- **User Satisfaction**: 4.6/5 rating for ease of finding information
-
 ---

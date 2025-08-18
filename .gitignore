@@ -145,6 +145,5 @@ cython_debug/
 chroma_db/
 data/
 visualizations/
-*.pdf
 *.sqlite3
 .DS_Store
